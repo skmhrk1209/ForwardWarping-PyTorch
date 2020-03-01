@@ -10,22 +10,20 @@ def warp_forward_dense(base_images, base_disparities, base_occlusions=None, inve
     y_coords, x_coords = torch.meshgrid(y_coords, x_coords)
     x_coords = x_coords.unsqueeze(0).expand_as(base_disparities)
     x_coords = x_coords + (-base_disparities if invert else base_disparities)
-    x_coords = torch.clamp(x_coords, -1, x_coords.size(-1))
     # -> [B, H, W]
     if base_occlusions is not None:
         if base_occlusions.dim() == 4:
             base_occlusions = base_occlusions.squeeze(1)
         x_coords = torch.where(base_occlusions > 0, x_coords, torch.full_like(x_coords, -1))
-    x_coords1 = torch.floor(x_coords)
-    x_coords2 = x_coords1 + 1
-    x_indices = torch.stack((x_coords1, x_coords2), dim=-1)
+    x_indices = torch.stack((torch.floor(x_coords), torch.floor(x_coords) + 1), dim=-1)
     # -> [B, H, W, 2]
     unilinear_weights = torch.abs(x_coords.unsqueeze(-1) - x_indices)
     unilinear_weights = torch.flip(unilinear_weights, dims=(-1,))
     # -> [B, H, W, 2]
     zeros = unilinear_weights.new_zeros(*unilinear_weights.size()[:-1], unilinear_weights.size(-2) + 2)
     # -> [B, H, W, W + 2]
-    unilinear_weights = zeros.scatter(-1, (x_indices + 1).long(), unilinear_weights)
+    x_indices = torch.clamp(x_indices, -1, x_indices.size(-2)) + 1
+    unilinear_weights = zeros.scatter(-1, x_indices.long(), unilinear_weights)
     # -> [B, H, W, W + 2]
     unilinear_weights = unilinear_weights[..., 1:-1]
     # -> [B, H, W, W]
@@ -49,15 +47,12 @@ def warp_forward_sparse(base_images, base_disparities, base_occlusions=None, inv
     y_coords, x_coords = torch.meshgrid(y_coords, x_coords)
     x_coords = x_coords.unsqueeze(0).unsqueeze(1).expand_as(base_images)
     x_coords = x_coords + (-base_disparities if invert else base_disparities)
-    x_coords = torch.clamp(x_coords, -1, x_coords.size(-1))
     # -> [B, C, H, W]
     if base_occlusions is not None:
         if base_occlusions.dim() == 3:
             base_occlusions = base_occlusions.unsqueeze(1)
         x_coords = torch.where(base_occlusions > 0, x_coords, torch.full_like(x_coords, -1))
-    x_coords1 = torch.floor(x_coords)
-    x_coords2 = x_coords1 + 1
-    x_indices = torch.stack((x_coords1, x_coords2), dim=-1)
+    x_indices = torch.stack((torch.floor(x_coords), torch.floor(x_coords) + 1), dim=-1)
     # -> [B, C, H, W, 2]
     unilinear_weights = torch.abs(x_coords.unsqueeze(-1) - x_indices)
     unilinear_weights = torch.flip(unilinear_weights, dims=(-1,))
@@ -72,7 +67,7 @@ def warp_forward_sparse(base_images, base_disparities, base_occlusions=None, inv
     # -> [5, B * C * H * W * 2]
     sparse_values = unilinear_weights.flatten()
     # -> [B * C * H * W * 2]
-    index_masks = (0 <= sparse_indices2) & (sparse_indices2 < x_coords.size(-1))
+    index_masks = (0 <= sparse_indices2) & (sparse_indices2 < x_indices.size(-2))
     sparse_indices = sparse_indices[..., index_masks]
     sparse_values = sparse_values[index_masks]
     sparse_size = (*unilinear_weights.size()[:-1], unilinear_weights.size(-2))
