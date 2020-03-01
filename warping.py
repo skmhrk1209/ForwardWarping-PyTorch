@@ -16,10 +16,12 @@ def warp_forward_dense(base_images, base_disparities, base_occlusions=None, inve
         if base_occlusions.dim() == 4:
             base_occlusions = base_occlusions.squeeze(1)
         x_coords = torch.where(base_occlusions > 0, x_coords, torch.full_like(x_coords, -1))
-    x_indices = torch.stack((torch.floor(x_coords), torch.ceil(x_coords)), dim=-1)
+    x_coords1 = torch.floor(x_coords)
+    x_coords2 = x_coords1 + 1
+    x_indices = torch.stack((x_coords1, x_coords2), dim=-1)
     # -> [B, H, W, 2]
     unilinear_weights = torch.abs(x_coords.unsqueeze(-1) - x_indices)
-    unilinear_weights = torch.flip(unilinear_weights, dims=-1)
+    unilinear_weights = torch.flip(unilinear_weights, dims=(-1,))
     # -> [B, H, W, 2]
     zeros = unilinear_weights.new_zeros(*unilinear_weights.size()[:-1], unilinear_weights.size(-2) + 2)
     # -> [B, H, W, W + 2]
@@ -53,10 +55,12 @@ def warp_forward_sparse(base_images, base_disparities, base_occlusions=None, inv
         if base_occlusions.dim() == 3:
             base_occlusions = base_occlusions.unsqueeze(1)
         x_coords = torch.where(base_occlusions > 0, x_coords, torch.full_like(x_coords, -1))
-    x_indices = torch.stack((torch.floor(x_coords), torch.ceil(x_coords)), dim=-1)
+    x_coords1 = torch.floor(x_coords)
+    x_coords2 = x_coords1 + 1
+    x_indices = torch.stack((x_coords1, x_coords2), dim=-1)
     # -> [B, C, H, W, 2]
     unilinear_weights = torch.abs(x_coords.unsqueeze(-1) - x_indices)
-    unilinear_weights = torch.flip(unilinear_weights, dims=-1)
+    unilinear_weights = torch.flip(unilinear_weights, dims=(-1,))
     # -> [B, C, H, W, 2]
     sparse_indices1 = torch.stack(
         torch.meshgrid(*(torch.arange(size, device=x_indices.device) for size in x_indices.size()))
