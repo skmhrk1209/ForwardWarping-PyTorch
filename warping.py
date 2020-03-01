@@ -26,7 +26,7 @@ def warp_forward(base_images, base_disparities, base_occlusions=None, invert=Tru
     # -> [B, H, W, 2]
     zeros = unilinear_weights.new_zeros(*unilinear_weights.size()[:-1], unilinear_weights.size(-2) + 2)
     # -> [B, H, W, W + 2]
-    unilinear_weights = scatter(unilinear_weights, zeros, x_indices.long() + 1, -1)
+    unilinear_weights = scatter(unilinear_weights, zeros, (x_indices + 1).long(), -1)
     # -> [B, H, W, W + 2]
     unilinear_weights = unilinear_weights[..., 1:-1]
     # -> [B, H, W, W]
@@ -34,7 +34,10 @@ def warp_forward(base_images, base_disparities, base_occlusions=None, invert=Tru
     # -> [B, C, H, W, 1]
     unilinear_weights = unilinear_weights.unsqueeze(1)
     # -> [B, 1, H, W, W]
-    match_images = torch.sum(base_images * unilinear_weights, dim=-2) / torch.sum(unilinear_weights, dim=-2)
+    match_images = torch.sum(base_images * unilinear_weights, dim=-2)
+    normalization_factors = torch.sum(unilinear_weights, dim=-2)
+    normalization_factors = torch.where(normalization_factors > 0, normalization_factors, torch.ones_like(normalization_factors))
+    match_images = match_images / normalization_factors
     # -> [B, C, H, W]
     return match_images
 
